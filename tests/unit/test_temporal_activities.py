@@ -86,11 +86,11 @@ async def test_generate_dataset_activity_raises_on_exception():
 
 @pytest.mark.asyncio
 async def test_generate_dataset_uploads_files_to_storage_when_flag_is_set(tmp_path, monkeypatch):
-    """When upload_to_storage=True with a run_id, files are uploaded to the canonical
-    workflow/{run_id}/data/ S3 path so the Terraform lifecycle rule covers them.
+    """When upload_to_storage=True with a run_id, files are uploaded under
+    dataset/runs/{run_id}/ so the remote job can download them and they are kept.
 
-    Regression for: K8s pod 404 — dataset generated locally but uploaded to a non-canonical
-    path (data/workflow/{run_id}/…) that didn't match the Terraform lifecycle prefix.
+    Regression for: K8s pod 404 when data was uploaded to a non-canonical path, and
+    for generated datasets being deleted by the workflow/ lifecycle expiry rule.
     """
     import interactors.temporal.activities as acts
 
@@ -116,12 +116,12 @@ async def test_generate_dataset_uploads_files_to_storage_when_flag_is_set(tmp_pa
         "without this the K8s pod gets a 404 from S3"
     )
     uploaded_keys = [call.args[1] for call in mock_storage.upload.call_args_list]
-    # Canonical S3 keys — covered by the workflow/ Terraform lifecycle rule.
-    assert f"workflow/{run_id}/data/train.jsonl" in uploaded_keys
-    assert f"workflow/{run_id}/data/eval.jsonl" in uploaded_keys
+    # Persistent dataset namespace — never under the expiring workflow/ prefix.
+    assert f"dataset/runs/{run_id}/train.jsonl" in uploaded_keys
+    assert f"dataset/runs/{run_id}/eval.jsonl" in uploaded_keys
     # Returned DatasetPaths use the S3 keys so the remote pod can download them.
-    assert result.train == f"workflow/{run_id}/data/train.jsonl"
-    assert result.eval == f"workflow/{run_id}/data/eval.jsonl"
+    assert result.train == f"dataset/runs/{run_id}/train.jsonl"
+    assert result.eval == f"dataset/runs/{run_id}/eval.jsonl"
 
 
 @pytest.mark.asyncio
@@ -294,7 +294,7 @@ async def test_export_activity_uses_model_name_as_filename_within_workflow_path(
             ),
         )
 
-    assert result.path == "workflow/r1/model/my-pet-v2.gguf.gz"
+    assert result.path == "model/runs/r1/my-pet-v2.gguf.gz"
 
 
 @pytest.mark.asyncio
@@ -311,7 +311,7 @@ async def test_export_activity_pipeline_run_id_takes_precedence_with_named_model
             ),
         )
 
-    assert result.path == "workflow/r1/model/my-pet-v2.gguf.gz"
+    assert result.path == "model/runs/r1/my-pet-v2.gguf.gz"
 
 
 @pytest.mark.asyncio
@@ -328,7 +328,7 @@ async def test_export_activity_uses_pipeline_run_id_for_storage_key(mock_storage
         )
 
     # The GGUFPath is the storage key returned by the activity (always .gz).
-    assert result == GGUFPath(path="workflow/r1/model/model.gguf.gz")
+    assert result == GGUFPath(path="model/runs/r1/model.gguf.gz")
     # Verify upload_model was called (port contract boundary).
     mock_storage.mock_upload_model.assert_called_once()
 
@@ -346,7 +346,7 @@ async def test_export_activity_pipeline_run_id_takes_precedence_over_model_id(mo
             ),
         )
 
-    assert result.path == "workflow/run-42/model/model.gguf.gz"
+    assert result.path == "model/runs/run-42/model.gguf.gz"
 
 
 @pytest.mark.asyncio
