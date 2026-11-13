@@ -90,7 +90,7 @@ class DatasetConfig:
     # The activity will upload the generated files to the configured StoragePort so
     # the remote job can download them — without this the pod gets a 404 from S3.
     upload_to_storage: bool = False
-    # DB run ID — used to derive the canonical S3 key: workflow/{run_id}/data/train.jsonl
+    # DB run ID — used to derive the canonical S3 key: dataset/runs/{run_id}/train.jsonl
     run_id: str = ""
 
 
@@ -147,7 +147,7 @@ class ExportConfig:
     run_id: str = ""           # non-empty → download checkpoint from remote before export
     remote_backend: str = ""
     model_id: str = ""         # fallback storage key when pipeline_run_id is unset
-    pipeline_run_id: str = ""  # pipeline UUID; drives storage key workflow/{id}/model/{name}.gguf
+    pipeline_run_id: str = ""  # pipeline UUID; drives storage key model/runs/{id}/{name}.gguf
     model_name: str = ""       # human-readable name; drives model/{model_id}/{name}.gguf key
 
 
@@ -274,12 +274,14 @@ async def generate_dataset_activity(config: DatasetConfig) -> DatasetPaths:
     if config.upload_to_storage:
         # Remote backends (K8s, Kaggle, SSH, …) fetch training data from S3.
         # Upload the generated files now so the remote job can call storage.download().
-        # Use the canonical S3 path (workflow/{run_id}/data/…) so the Terraform lifecycle
-        # rule (prefix = "workflow/") covers these objects.
+        # Store under dataset/runs/{run_id}/ — never workflow/, which a lifecycle rule
+        # expires — so generated data survives for audits and retraining.
+        from adapters.storage.paths import run_dataset_eval_key, run_dataset_train_key
+
         storage = _get_storage()
         if config.run_id:
-            train_s3_key = f"workflow/{config.run_id}/data/train.jsonl"
-            eval_s3_key = f"workflow/{config.run_id}/data/eval.jsonl"
+            train_s3_key = run_dataset_train_key(config.run_id)
+            eval_s3_key = run_dataset_eval_key(config.run_id)
         else:
             train_s3_key = train_path
             eval_s3_key = eval_path
@@ -722,11 +724,11 @@ async def _evaluate_local(config: EvalConfig, loop: asyncio.AbstractEventLoop) -
 @activity.defn
 async def export_activity(config: ExportConfig) -> GGUFPath:
     # Determine the destination GGUF storage key upfront — shared by all paths.
-    from adapters.storage.paths import standalone_model_key, workflow_model_key
+    from adapters.storage.paths import standalone_model_key, run_model_key
 
     if config.pipeline_run_id:
         name = config.model_name or "model"
-        gguf_key = workflow_model_key(config.pipeline_run_id, name)
+        gguf_key = run_model_key(config.pipeline_run_id, name)
     elif config.model_name or config.model_id:
         key_id = config.model_id or config.model_name
         name = config.model_name or "model"
