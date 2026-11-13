@@ -9,6 +9,11 @@ metadata:
     nginx.ingress.kubernetes.io/limit-connections: "5"
     # Whitelist the internal health-check source so it is never rate-limited
     nginx.ingress.kubernetes.io/limit-whitelist: "10.42.3.1/32"
+    # ingress-nginx defaults to a 1 MB body limit, which 413s normal dataset
+    # uploads. Keep this above MAX_UPLOAD_BYTES (50 MB) in routes/datasets.py so
+    # the API, not nginx, rejects oversized files. Enforced by
+    # tests/unit/test_ingress_limits.py.
+    nginx.ingress.kubernetes.io/proxy-body-size: "60m"
 spec:
   ingressClassName: nginx
   tls:
