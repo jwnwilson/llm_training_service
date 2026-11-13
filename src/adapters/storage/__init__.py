@@ -9,7 +9,7 @@ from pathlib import Path
 from adapters.storage.local import LocalStorageAdapter
 from adapters.storage.s3 import S3StorageAdapter
 
-from adapters.storage.paths import standalone_model_key, workflow_model_key
+from adapters.storage.paths import standalone_model_key, run_model_key
 
 __all__ = [
     "LocalStorageAdapter",
@@ -17,7 +17,7 @@ __all__ = [
     "upload_model",
     "download_model",
     "standalone_model_key",
-    "workflow_model_key",
+    "run_model_key",
 ]
 
 

@@ -99,21 +99,41 @@ data "aws_s3_bucket" "ml_artifacts" {
   bucket = var.s3_bucket
 }
 
+# Versioning turns accidental deletes and lifecycle expiry into recoverable
+# delete markers. Old versions are cleaned up by the noncurrent rule below.
+resource "aws_s3_bucket_versioning" "ml_artifacts" {
+  bucket = data.aws_s3_bucket.ml_artifacts.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# Finished models live under model/ and datasets under dataset/ — neither may
+# ever expire. tests/unit/test_storage_paths.py enforces this for model keys.
 resource "aws_s3_bucket_lifecycle_configuration" "ml_artifacts" {
   bucket = data.aws_s3_bucket.ml_artifacts.id
 
+  # Versioning must be enabled before noncurrent-version rules take effect.
+  depends_on = [aws_s3_bucket_versioning.ml_artifacts]
+
+  # DISABLED: until the run_model_key change (model/runs/{run_id}/) is deployed,
+  # production still writes finished models to workflow/{run_id}/model/.
+  # This rule silently deleted every pipeline-trained model in 2026.
+  # Re-enable only once no model or dataset can be stored under workflow/.
   rule {
     id     = "expire-workflow-artifacts"
-    status = "Enabled"
+    status = "Disabled"
     filter { prefix = "workflow/" }
     expiration { days = 30 }
   }
 
   rule {
-    id     = "expire-datasets"
+    id     = "expire-noncurrent-versions"
     status = "Enabled"
-    filter { prefix = "dataset/" }
-    expiration { days = 90 }
+    filter {}
+    noncurrent_version_expiration { noncurrent_days = 7 }
+    expiration { expired_object_delete_marker = true }
   }
 
   rule {

@@ -520,7 +520,7 @@ def activate_run(
 
     from adapters.inference import LlamaCppInferenceAdapter
     from adapters.storage import LocalStorageAdapter, download_model
-    from adapters.storage.paths import workflow_model_key
+    from adapters.storage.paths import run_model_key
     from interactors.api.deps import configure
     from interactors.temporal.activities import _get_storage
 
@@ -529,7 +529,7 @@ def activate_run(
     except RuntimeError:
         storage = LocalStorageAdapter()
 
-    gguf_key = workflow_model_key(run_id)
+    gguf_key = run_model_key(run_id)
     local_path = Path(f"data/workflow/{run_id}/model.gguf")
     try:
         download_model(storage, gguf_key, local_path)
