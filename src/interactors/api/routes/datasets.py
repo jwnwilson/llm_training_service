@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
+from adapters.storage.paths import dataset_eval_key, dataset_train_key
 from domain.models import DatasetConfig, DatasetRecord, DatasetType, PaginatedResponse, UserContext
 from domain.ports import DatasetStorePort, StoragePort
 from interactors.api.auth import require_approved
@@ -28,6 +29,10 @@ router = APIRouter(
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 CHUNK_SIZE = 64 * 1024  # 64 KB read buffer
+DATASET_KEY_BY_TYPE = {
+    DatasetType.TRAIN: dataset_train_key,
+    DatasetType.EVAL: dataset_eval_key,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +141,7 @@ async def create_dataset(
     import uuid as _uuid
 
     dataset_id = str(_uuid.uuid4())
-    key = f"dataset/{dataset_id}/train.jsonl"
+    key = DATASET_KEY_BY_TYPE[dataset_type](dataset_id)
     await _upload_to_storage(file, storage, key)
 
     config = DatasetConfig(

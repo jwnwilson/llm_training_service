@@ -98,16 +98,34 @@ class TestCreateDataset:
         assert storage.upload.called
 
     @pytest.mark.asyncio
-    async def test_storage_key_is_unique_uuid_path(self, client):
+    @pytest.mark.parametrize(
+        ("dataset_type", "filename"),
+        [("train", "train.jsonl"), ("eval", "eval.jsonl")],
+    )
+    async def test_storage_key_filename_matches_dataset_type(self, client, dataset_type, filename):
         c, storage, _ = client
-        await c.post(
+        resp = await c.post(
             "/api/datasets",
-            data={"name": "ds", "dataset_type": "eval"},
+            data={"name": "ds", "dataset_type": dataset_type},
             files={"file": ("data.jsonl", io.BytesIO(VALID_JSONL), "application/octet-stream")},
         )
-        key = storage.upload.call_args[0][1]
-        assert key.startswith("dataset/")
-        assert key.endswith("/train.jsonl")
+        uploaded_key = storage.upload.call_args[0][1]
+        assert uploaded_key.startswith("dataset/")
+        assert uploaded_key.endswith(f"/{filename}")
+        # The stored record must point at the object that was actually uploaded.
+        assert resp.json()["key"] == uploaded_key
+
+    @pytest.mark.asyncio
+    async def test_storage_key_is_unique_per_dataset(self, client):
+        c, storage, _ = client
+        for _ in range(2):
+            await c.post(
+                "/api/datasets",
+                data={"name": "ds", "dataset_type": "eval"},
+                files={"file": ("data.jsonl", io.BytesIO(VALID_JSONL), "application/octet-stream")},
+            )
+        first_key, second_key = (call.args[1] for call in storage.upload.call_args_list)
+        assert first_key != second_key
 
     @pytest.mark.asyncio
     async def test_empty_file_returns_400(self, client):
